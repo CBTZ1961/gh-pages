@@ -1,0 +1,83 @@
+---
+title: "Machine Lerning exercise"
+author: "Christian Butzlaff"
+date: "April 23, 2017"
+output: html_document
+keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+In this exercise we use body sensors and a sensor mounted to a dumbbell to monitor the correct execution of a barbell exercise. 
+The publication of the reserch by Velloso et.al. can be found at: Velloso,E; Bulling,A; Gellersen,H; Ugulino,W; Fuks,H. Qualitative Activity Recognition of Weight lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). Stuttgart, Germany:ACM SIGHCI, 2013 .
+This exercise is using the data collected by the authors (http://groupware.les.inf.puc-rio.br/har) and tries to predict the outcome in a similar manner than the original authors did.
+The movement types were categorized in five classes (A to E). It is the goal to predict the class based on the collected movement data.
+
+## Data load and feature selection
+I have copied the training and test data sets into a local directory. After reading them into R, I am removing empty columns and 'NA' columns from the data sets.
+```{r, warning=FALSE}
+library(dplyr)
+library(caret)
+```
+```{r data}
+## Training data set
+pml.training <- read.csv("C:/Users/Christian/datasciencecoursera/pml-training.csv",na.strings=c("","NA"), stringsAsFactors=FALSE)
+pml.train <- t(pml.training)
+good <- complete.cases(pml.train)
+training <- data.frame(t(pml.train[good, ]))
+training <- select(training, -X, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -cvtd_timestamp, -new_window, -num_window)
+
+## Testing data set
+pml.testing <- read.csv("C:/Users/Christian/datasciencecoursera/pml-testing.csv",na.strings=c("","NA"), stringsAsFactors=FALSE)
+pml.test <- t(pml.testing)
+good <- complete.cases(pml.test)
+testing <- data.frame(t(pml.test[good, ]))
+testing <- select(testing, -X, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -cvtd_timestamp, -new_window, -num_window)
+
+```
+
+In the next step, we need to decide on the features to be used. In the original paper, 16 feature were used. I cannot fully identify the features used in the data sets. I therefore removed the detailed measurements on x,y and z coordinates and keep the summary features for the different sensors at the belt, the forearm, the arm and the dumbbell. Note that the training set contains the 'classes' variable, which is the result, or the one we want to predict later on. Note that, with exception of the class variable, all variables were converted from labels to numeric.
+```{r features}
+training <- transmute(training,roll_belt = as.numeric(as.character(roll_belt)), pitch_belt = as.numeric(as.character(pitch_belt)), yaw_belt = as.numeric(as.character(yaw_belt)), total_accel_belt = as.numeric(as.character(total_accel_belt)), roll_forearm = as.numeric(as.character(roll_forearm)), pitch_forearm = as.numeric(as.character(pitch_forearm)), yaw_forearm = as.numeric(as.character(yaw_forearm)), total_accel_forearm = as.numeric(as.character(total_accel_forearm)), roll_dumbbell = as.numeric(as.character(roll_dumbbell)), pitch_dumbbell = as.numeric(as.character(pitch_dumbbell)), yaw_dumbbell = as.numeric(as.character(yaw_dumbbell)),total_accel_dumbbell = as.numeric(as.character(total_accel_dumbbell)), roll_arm = as.numeric(as.character(roll_arm)), pitch_arm = as.numeric(as.character(pitch_arm)), yaw_arm = as.numeric(as.character(yaw_arm)), total_accel_arm = as.numeric(as.character(total_accel_arm)), classe = classe)
+
+testing <- transmute(testing,roll_belt = as.numeric(as.character(roll_belt)), pitch_belt = as.numeric(as.character(pitch_belt)), yaw_belt = as.numeric(as.character(yaw_belt)), total_accel_belt = as.numeric(as.character(total_accel_belt)), roll_forearm = as.numeric(as.character(roll_forearm)), pitch_forearm = as.numeric(as.character(pitch_forearm)), yaw_forearm = as.numeric(as.character(yaw_forearm)), total_accel_forearm = as.numeric(as.character(total_accel_forearm)), roll_dumbbell = as.numeric(as.character(roll_dumbbell)), pitch_dumbbell = as.numeric(as.character(pitch_dumbbell)), yaw_dumbbell = as.numeric(as.character(yaw_dumbbell)),total_accel_dumbbell = as.numeric(as.character(total_accel_dumbbell)), roll_arm = as.numeric(as.character(roll_arm)), pitch_arm = as.numeric(as.character(pitch_arm)), yaw_arm = as.numeric(as.character(yaw_arm)), total_accel_arm = as.numeric(as.character(total_accel_arm)))
+```
+
+In the following we display the structure of the training and testing datasets:
+```{r}
+str(training)
+str(testing)
+```
+
+In the next step we go through cross validation and the creation of the model. The origial authors used the random forest method, so do I.
+The conversion of the label variables into numeric vriables was a requirement for the random forest algorithm to succeed.
+In order to further improve runtime, I am setting parallel processing first.
+```{r, warning=FALSE}
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+```
+
+Now we start with the model creation using cross validation (cv) and the random forest (rf) method. Random forest is used, since this is what is used in the original paper. For the same eason we use 10 fold cross validation and 10 trees.
+```{r}
+fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
+set.seed(345)
+model <- train(classe ~., data = training, method = 'rf', ntree = 10,trControl = fitControl)
+stopCluster(cluster)
+registerDoSEQ()
+model
+```
+
+The cross validation is selecting the model with the highest accuracy (0.986240).
+
+As a next step we us the testing data to predict the outcome.
+```{r}
+pred <- predict(model, newdata = testing)
+pred
+```
+
+The listed classes are the result of the prediction based on the model created. They provide the results for the related quiz.
